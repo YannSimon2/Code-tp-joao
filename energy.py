@@ -1,7 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
-from scipy.constants import k as , c
+from scipy.constants import k as kb, c
 
 
 energy = np.array([0.6,1.02,1.5,1.97,2.95,3.65,4.62,5.7,7.6,8.54,9.5,10.6])*1e-3
@@ -53,7 +53,23 @@ m_air = 4.81e-26  # average mass of air molecule (kg)
 
 # Time at which measurements were taken (ADJUST THIS BASED ON YOUR EXPERIMENT!)
 # For laser-induced plasma, typical imaging delay is a few nanoseconds
-t_measurement = 5.63/c  # 5 ns - CHANGE THIS to match your experimental delay
+t_measurement = 5.63/c  # 5.63 m / c ≈ 18.8 ns - CHANGE THIS to match your experimental delay
+
+# Infer measurement time from Sedov-Taylor model
+# From theory: R(t) = ξ * (E/ρ₀)^(1/5) * t^(2/5)
+# From fit: R = C * E^(1/5)
+# Therefore: C = ξ * ρ₀^(-1/5) * t^(2/5)
+# Solving for t: t = (C * ρ₀^(1/5) / ξ)^(5/2)
+
+xi = 1.033  # Sedov-Taylor dimensionless constant for 3D spherical blast wave with γ=1.4
+
+# Calculate inferred time from longitudinal data
+t_inferred_longi = (C_longi * rho0**(1/5) / xi)**(5/2)
+u_t_inferred_longi = t_inferred_longi * (5/2) * (u_C_longi / C_longi)
+
+# Calculate inferred time from transverse data
+t_inferred_transv = (C_transv * rho0**(1/5) / xi)**(5/2)
+u_t_inferred_transv = t_inferred_transv * (5/2) * (u_C_transv / C_transv)
 
 # Calculate shock parameters for each energy
 # From Sedov-Taylor: R = C·E^(1/5) at time t
@@ -61,32 +77,7 @@ t_measurement = 5.63/c  # 5 ns - CHANGE THIS to match your experimental delay
 R_longi = sedov_taylor_energy(energy, C_longi)
 R_transv = sedov_taylor_energy(energy, C_transv)
 
-# Shock velocity dR/dt
-dRdt_longi = (2/5) * R_longi / t_measurement
-dRdt_transv = (2/5) * R_transv / t_measurement
 
-# Sound speed in ambient air
-vs = np.sqrt(gamma * P0 / rho0)
-
-# Mach number: M = (1/vs) * dR/dt
-M_longi = dRdt_longi / vs
-M_transv = dRdt_transv / vs
-
-# Shock jump conditions (equations 1.3-1.6)
-# Fluid velocity behind shock
-U_bs_longi = (2 / (gamma + 1)) * dRdt_longi
-U_bs_transv = (2 / (gamma + 1)) * dRdt_transv
-
-# Density behind shock
-rho_bs = ((gamma + 1) / (gamma - 1)) * rho0
-
-# Pressure behind shock
-P_bs_longi = (2 / (gamma + 1)) * rho0 * dRdt_longi**2
-P_bs_transv = (2 / (gamma + 1)) * rho0 * dRdt_transv**2
-
-# Temperature behind shock
-T_bs_longi = (2 * gamma / (gamma + 1)) * ((gamma - 1)/(gamma + 1) * M_longi**2 + 1) * T0
-T_bs_transv = (2 * gamma / (gamma + 1)) * ((gamma - 1)/(gamma + 1) * M_transv**2 + 1) * T0
 
 plt.figure(figsize=(10, 5))
 plt.errorbar(energy, plasma_size_longi_m, yerr=u_plasma_size_longi_m, xerr=u_energy, fmt='o', capsize=5, label='Longitudinal Size')
@@ -101,55 +92,25 @@ plt.plot(energy_smooth, sedov_taylor_energy(energy_smooth, C_transv), 'g--',
 plt.xlabel('Energy (J)')
 plt.ylabel('Plasma Size (m)')
 plt.title('Plasma Size vs Energy (Sedov-Taylor scaling: R ∝ E$^{1/5}$)')
-plt.legend()
+plt.legend(fontsize=8)
 plt.grid()
 
-# Create additional figure for shock parameters
-fig2, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(12, 10))
+# Add text box with time inference
+textstr = f'Time Inference from S-T model:\n'
+textstr += f'Assumed: t = {t_measurement*1e9:.1f} ns\n'
+textstr += f'Inferred (longi): t = {t_inferred_longi*1e9:.1f} ns\n'
+textstr += f'Inferred (transv): t = {t_inferred_transv*1e9:.1f} ns\n'
+textstr += f'Discrepancy (longi): {abs(t_inferred_longi - t_measurement)/t_measurement*100:.1f}%\n'
+textstr += f'Discrepancy (transv): {abs(t_inferred_transv - t_measurement)/t_measurement*100:.1f}%'
+props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
+plt.text(0.02, 0.98, textstr, transform=plt.gca().transAxes, fontsize=8,
+        verticalalignment='top', bbox=props)
 
-# Plot Mach number
-ax1.plot(energy*1e3, M_longi, 'ro-', label='Longitudinal')
-ax1.plot(energy*1e3, M_transv, 'go-', label='Transverse')
-ax1.set_xlabel('Energy (mJ)')
-ax1.set_ylabel('Mach Number M')
-ax1.set_title(f'Shock Mach Number vs Energy (t={t_measurement*1e9:.1f} ns)')
-ax1.legend()
-ax1.grid(True)
 
-# Plot shock velocity
-ax2.plot(energy*1e3, dRdt_longi/1e3, 'ro-', label='Longitudinal')
-ax2.plot(energy*1e3, dRdt_transv/1e3, 'go-', label='Transverse')
-ax2.set_xlabel('Energy (mJ)')
-ax2.set_ylabel('Shock Velocity (km/s)')
-ax2.set_title('Shock Velocity vs Energy')
-ax2.legend()
-ax2.grid(True)
-
-# Plot pressure behind shock
-ax3.plot(energy*1e3, P_bs_longi/1e3, 'ro-', label='Longitudinal')
-ax3.plot(energy*1e3, P_bs_transv/1e3, 'go-', label='Transverse')
-ax3.axhline(y=P0/1e3, color='k', linestyle='--', alpha=0.5, label='P₀')
-ax3.set_xlabel('Energy (mJ)')
-ax3.set_ylabel('Pressure (kPa)')
-ax3.set_title('Pressure Behind Shock vs Energy')
-ax3.legend()
-ax3.grid(True)
-
-# Plot temperature behind shock
-ax4.plot(energy*1e3, T_bs_longi, 'ro-', label='Longitudinal')
-ax4.plot(energy*1e3, T_bs_transv, 'go-', label='Transverse')
-ax4.axhline(y=T0, color='k', linestyle='--', alpha=0.5, label='T₀')
-ax4.set_xlabel('Energy (mJ)')
-ax4.set_ylabel('Temperature (K)')
-ax4.set_title('Temperature Behind Shock vs Energy')
-ax4.legend()
-ax4.grid(True)
-
-plt.tight_layout()
 
 # Print results
 print(f"\n=== Sedov-Taylor Energy Scaling Analysis ===")
-print(f"\nMeasurement time: t = {t_measurement*1e9:.2f} ns")
+print(f"\nAssumed measurement time: t = {t_measurement*1e9:.2f} ns ({t_measurement*1e6:.2f} μs)")
 print(f"\nLongitudinal size:")
 print(f"  R = C·E^(1/5)")
 print(f"  C = ({C_longi:.4e} ± {u_C_longi:.4e}) m·J^(-1/5)")
@@ -158,30 +119,22 @@ print(f"  R = C·E^(1/5)")
 print(f"  C = ({C_transv:.4e} ± {u_C_transv:.4e}) m·J^(-1/5)")
 print(f"\nRatio C_transv/C_longi = {C_transv/C_longi:.3f}")
 
-print(f"\n=== Shock Parameters (calculated at E = {energy[-1]*1e3:.2f} mJ) ===")
-print(f"\nAmbient conditions:")
-print(f"  ρ₀ = {rho0} kg/m³")
-print(f"  P₀ = {P0/1e3:.2f} kPa")
-print(f"  T₀ = {T0} K")
-print(f"  γ = {gamma}")
-print(f"  Sound speed: vs = {vs:.2f} m/s")
+print(f"\n=== Time Inference from Sedov-Taylor Model ===")
+print(f"Using: C = ξ * ρ₀^(-1/5) * t^(2/5)  =>  t = (C * ρ₀^(1/5) / ξ)^(5/2)")
+print(f"With: ξ = {xi}, ρ₀ = {rho0} kg/m³, γ = {gamma}")
+print(f"\nInferred time from longitudinal data:")
+print(f"  t_inferred = ({t_inferred_longi*1e9:.2f} ± {u_t_inferred_longi*1e9:.2f}) ns")
+print(f"  t_inferred = ({t_inferred_longi*1e6:.3f} ± {u_t_inferred_longi*1e6:.3f}) μs")
+print(f"\nInferred time from transverse data:")
+print(f"  t_inferred = ({t_inferred_transv*1e9:.2f} ± {u_t_inferred_transv*1e9:.2f}) ns")
+print(f"  t_inferred = ({t_inferred_transv*1e6:.3f} ± {u_t_inferred_transv*1e6:.3f}) μs")
+print(f"\n=== Comparison with Actual Measurement Time ===")
+print(f"Assumed time:     t_measured  = {t_measurement*1e9:.2f} ns ({t_measurement*1e6:.3f} μs)")
+print(f"Inferred (longi): t_inferred  = {t_inferred_longi*1e9:.2f} ns ({t_inferred_longi*1e6:.3f} μs)")
+print(f"Discrepancy (longi):           {abs(t_inferred_longi - t_measurement)*1e9:.2f} ns ({abs(t_inferred_longi - t_measurement)/t_measurement*100:.1f}%)")
+print(f"Inferred (transv): t_inferred = {t_inferred_transv*1e9:.2f} ns ({t_inferred_transv*1e6:.3f} μs)")
+print(f"Discrepancy (transv):          {abs(t_inferred_transv - t_measurement)*1e9:.2f} ns ({abs(t_inferred_transv - t_measurement)/t_measurement*100:.1f}%)")
 
-print(f"\nLongitudinal direction:")
-print(f"  Shock radius: R = {R_longi[-1]*1e3:.4f} mm")
-print(f"  Shock velocity: dR/dt = {dRdt_longi[-1]:.2e} m/s")
-print(f"  Mach number: M = {M_longi[-1]:.2f}")
-print(f"  Fluid velocity behind shock: U_bs = {U_bs_longi[-1]:.2e} m/s")
-print(f"  Density behind shock: ρ_bs = {rho_bs:.3f} kg/m³ ({rho_bs/rho0:.2f}×ρ₀)")
-print(f"  Pressure behind shock: P_bs = {P_bs_longi[-1]/1e3:.2f} kPa ({P_bs_longi[-1]/P0:.2f}×P₀)")
-print(f"  Temperature behind shock: T_bs = {T_bs_longi[-1]:.1f} K ({T_bs_longi[-1]/T0:.2f}×T₀)")
 
-print(f"\nTransverse direction:")
-print(f"  Shock radius: R = {R_transv[-1]*1e3:.4f} mm")
-print(f"  Shock velocity: dR/dt = {dRdt_transv[-1]:.2e} m/s")
-print(f"  Mach number: M = {M_transv[-1]:.2f}")
-print(f"  Fluid velocity behind shock: U_bs = {U_bs_transv[-1]:.2e} m/s")
-print(f"  Density behind shock: ρ_bs = {rho_bs:.3f} kg/m³ ({rho_bs/rho0:.2f}×ρ₀)")
-print(f"  Pressure behind shock: P_bs = {P_bs_transv[-1]/1e3:.2f} kPa ({P_bs_transv[-1]/P0:.2f}×P₀)")
-print(f"  Temperature behind shock: T_bs = {T_bs_transv[-1]:.1f} K ({T_bs_transv[-1]/T0:.2f}×T₀)")
 
 plt.show()

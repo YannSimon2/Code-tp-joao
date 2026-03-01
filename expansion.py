@@ -29,10 +29,13 @@ u_delays_m = 0.01
 delays_s = delays_m / c
 u_delays_s = u_delays_m / c
 
-# Constants for Sedov-Taylor model
+# Constants for Sedov-Taylor model and shock physics
 rho0 = 1.225  # air density at STP (kg/m^3)
 xi = 1.033  # Sedov-Taylor dimensionless constant for 3D spherical blast wave
 mi = m_p  # assuming hydrogen plasma
+gamma = 1.4  # adiabatic index for air
+T0 = 300  # ambient temperature (K)
+P0 = 101325  # ambient pressure (Pa)
 
 # Sedov-Taylor fit function: R(t) = A * t^(2/5)
 def sedov_taylor(t, A):
@@ -65,6 +68,36 @@ Es_J_longi = rho0 * (A_sedov_longi / xi)**5
 u_Es_J_longi = Es_J_longi * 5 * (u_A_sedov_longi / A_sedov_longi)
 Es_mJ_longi = Es_J_longi * 1e3
 u_Es_mJ_longi = u_Es_J_longi * 1e3
+
+# Calculate shock physics quantities behind the shock (longitudinal)
+# Use the mean time for evaluation
+t_mean = np.mean(delays_s)
+# Shock velocity dR/dt from Sedov-Taylor: dR/dt = (2/5) * A * t^(-3/5)
+dRdt_longi = (2/5) * A_sedov_longi * t_mean**(-3/5)
+u_dRdt_longi = dRdt_longi * (u_A_sedov_longi / A_sedov_longi)
+
+# Sound speed in ambient air
+vs = np.sqrt(gamma * P0 / rho0)
+
+# Mach number
+M_longi = dRdt_longi / vs
+u_M_longi = M_longi * (u_dRdt_longi / dRdt_longi)
+
+# Fluid velocity behind shock (Eq. 1.3)
+U_bs_longi = (2 / (gamma + 1)) * dRdt_longi
+u_U_bs_longi = U_bs_longi * (u_dRdt_longi / dRdt_longi)
+
+# Density behind shock (Eq. 1.4)
+rho_bs_longi = ((gamma + 1) / (gamma - 1)) * rho0
+# No uncertainty since it only depends on gamma and rho0
+
+# Pressure behind shock (Eq. 1.5)
+P_bs_longi = (2 / (gamma + 1)) * rho0 * dRdt_longi**2
+u_P_bs_longi = P_bs_longi * 2 * (u_dRdt_longi / dRdt_longi)
+
+# Temperature behind shock (Eq. 1.6)
+T_bs_longi = (2 * gamma / (gamma + 1)) * ((gamma - 1) / (gamma + 1) * M_longi**2 + 1) * T0
+u_T_bs_longi = T_bs_longi * 2 * (gamma - 1) / (gamma + 1) * M_longi**2 / ((gamma - 1) / (gamma + 1) * M_longi**2 + 1) * (u_M_longi / M_longi)
 
 # Plot Sedov-Taylor fit
 ax1.plot(t_smooth, sedov_taylor(t_smooth, A_sedov_longi), 'g-.', 
@@ -111,6 +144,30 @@ Es_J = rho0 * (A_sedov / xi)**5
 u_Es_J = Es_J * 5 * (u_A_sedov / A_sedov)  # propagated uncertainty
 Es_mJ = Es_J * 1e3
 u_Es_mJ = u_Es_J * 1e3
+
+# Calculate shock physics quantities behind the shock (transverse)
+# Shock velocity dR/dt from Sedov-Taylor: dR/dt = (2/5) * A * t^(-3/5)
+dRdt_transv = (2/5) * A_sedov * t_mean**(-3/5)
+u_dRdt_transv = dRdt_transv * (u_A_sedov / A_sedov)
+
+# Mach number
+M_transv = dRdt_transv / vs
+u_M_transv = M_transv * (u_dRdt_transv / dRdt_transv)
+
+# Fluid velocity behind shock (Eq. 1.3)
+U_bs_transv = (2 / (gamma + 1)) * dRdt_transv
+u_U_bs_transv = U_bs_transv * (u_dRdt_transv / dRdt_transv)
+
+# Density behind shock (Eq. 1.4)
+rho_bs_transv = ((gamma + 1) / (gamma - 1)) * rho0
+
+# Pressure behind shock (Eq. 1.5)
+P_bs_transv = (2 / (gamma + 1)) * rho0 * dRdt_transv**2
+u_P_bs_transv = P_bs_transv * 2 * (u_dRdt_transv / dRdt_transv)
+
+# Temperature behind shock (Eq. 1.6)
+T_bs_transv = (2 * gamma / (gamma + 1)) * ((gamma - 1) / (gamma + 1) * M_transv**2 + 1) * T0
+u_T_bs_transv = T_bs_transv * 2 * (gamma - 1) / (gamma + 1) * M_transv**2 / ((gamma - 1) / (gamma + 1) * M_transv**2 + 1) * (u_M_transv / M_transv)
 
 # Plot Sedov-Taylor fit
 ax2.plot(t_smooth, sedov_taylor(t_smooth, A_sedov), 'g-.', 
@@ -159,6 +216,13 @@ print(f"      Te = ({Te_eV:.4f} ± {u_Te_eV:.4f}) eV")
 print(f"  Sedov-Taylor model (3D spherical, R ∝ t^(2/5)):")
 print(f"    Coefficient A: ({A_sedov_longi:.4e} ± {u_A_sedov_longi:.4e}) m·s^(-2/5)")
 print(f"    Laser energy E₀: ({Es_mJ_longi:.2f} ± {u_Es_mJ_longi:.2f}) mJ")
+print(f"  Shock physics (at t = {t_mean*1e9:.2f} ns):")
+print(f"    Shock velocity dR/dt: ({dRdt_longi:.4e} ± {u_dRdt_longi:.4e}) m/s")
+print(f"    Mach number M: ({M_longi:.3f} ± {u_M_longi:.3f})")
+print(f"    Fluid velocity U_bs: ({U_bs_longi:.4e} ± {u_U_bs_longi:.4e}) m/s")
+print(f"    Density ρ_bs: {rho_bs_longi:.3f} kg/m³")
+print(f"    Pressure P_bs: ({P_bs_longi:.4e} ± {u_P_bs_longi:.4e}) Pa")
+print(f"    Temperature T_bs: ({T_bs_longi:.2f} ± {u_T_bs_longi:.2f}) K")
 print(f"\nTransverse expansion:")
 print(f"  Linear model:")
 print(f"    Expansion speed: ({v_expansion_transv:.4e} ± {u_v_expansion_transv:.4e}) m/s")
@@ -168,6 +232,13 @@ print(f"      Te = ({Te_transv_eV:.4f} ± {u_Te_transv_eV:.4f}) eV")
 print(f"  Sedov-Taylor model (3D spherical, R ∝ t^(2/5)):")
 print(f"    Coefficient A: ({A_sedov:.4e} ± {u_A_sedov:.4e}) m·s^(-2/5)")
 print(f"    Laser energy E₀: ({Es_mJ:.2f} ± {u_Es_mJ:.2f}) mJ")
+print(f"  Shock physics (at t = {t_mean*1e9:.2f} ns):")
+print(f"    Shock velocity dR/dt: ({dRdt_transv:.4e} ± {u_dRdt_transv:.4e}) m/s")
+print(f"    Mach number M: ({M_transv:.3f} ± {u_M_transv:.3f})")
+print(f"    Fluid velocity U_bs: ({U_bs_transv:.4e} ± {u_U_bs_transv:.4e}) m/s")
+print(f"    Density ρ_bs: {rho_bs_transv:.3f} kg/m³")
+print(f"    Pressure P_bs: ({P_bs_transv:.4e} ± {u_P_bs_transv:.4e}) Pa")
+print(f"    Temperature T_bs: ({T_bs_transv:.2f} ± {u_T_bs_transv:.2f}) K")
 print(f"\nSedov-Taylor energy comparison:")
 print(f"  From longitudinal: ({Es_mJ_longi:.2f} ± {u_Es_mJ_longi:.2f}) mJ")
 print(f"  From transverse:   ({Es_mJ:.2f} ± {u_Es_mJ:.2f}) mJ")
