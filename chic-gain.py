@@ -111,3 +111,64 @@ plt.colorbar(scatter2, label='G')
 plt.legend(fontsize=12)
 plt.grid(True, alpha=0.3)
 plt.show()
+
+# Create a parallel coordinates plot showing all 5 variables
+fig, ax = plt.subplots(figsize=(14, 8))
+
+# Extract the 5 parameters and gain
+params = tests[:, [0, 1, 2, 3, 4]]  # tf, t1, t2, P1, P2
+gains = tests[:, 7]  # G
+
+# Normalize each parameter to [0, 1] range for plotting
+params_norm = np.zeros_like(params)
+for i in range(params.shape[1]):
+    pmin, pmax = params[:, i].min(), params[:, i].max()
+    if pmax > pmin:
+        params_norm[:, i] = (params[:, i] - pmin) / (pmax - pmin)
+    else:
+        params_norm[:, i] = 0.5
+
+# Create x positions for each axis
+x = np.arange(5)
+param_names = ['$t_f$', '$t_1$', '$t_2$', '$P_1$', '$P_2$']
+param_units = ['(ns)', '(ns)', '(ns)', '(TW)', '(TW)']
+
+# Normalize gains for colormap
+gain_norm = (gains - gains.min()) / (gains.max() - gains.min())
+cmap = plt.cm.viridis
+
+# Plot each data point as a line
+for i in range(len(params_norm)):
+    color = cmap(gain_norm[i])
+    ax.plot(x, params_norm[i], '-o', color=color, alpha=0.6, linewidth=2, markersize=6)
+
+# Highlight the maximum gain
+max_idx = np.argmax(gains)
+ax.plot(x, params_norm[max_idx], '-o', color='red', linewidth=3, markersize=10, 
+        label=f'Max G = {gains[max_idx]:.1f}', zorder=10)
+
+# Set up the axes
+ax.set_xticks(x)
+ax.set_xticklabels([f'{name}\n{unit}' for name, unit in zip(param_names, param_units)], fontsize=12)
+ax.set_ylim(-0.05, 1.05)
+ax.set_ylabel('Normalized Value', fontsize=14)
+ax.set_title('CHIC Simulation: Parallel Coordinates Plot - Gain vs All Parameters', 
+             fontsize=16, fontweight='bold', pad=20)
+ax.grid(True, alpha=0.3, axis='y')
+
+# Add actual parameter values on the right side of each axis
+for i, (name, unit) in enumerate(zip(param_names, param_units)):
+    pmin, pmax = params[:, i].min(), params[:, i].max()
+    # Add min and max labels
+    ax.text(i, -0.02, f'{pmin:.2f}', ha='center', va='top', fontsize=9, color='gray')
+    ax.text(i, 1.02, f'{pmax:.2f}', ha='center', va='bottom', fontsize=9, color='gray')
+
+# Add colorbar
+sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=gains.min(), vmax=gains.max()))
+sm.set_array([])
+cbar = plt.colorbar(sm, ax=ax, pad=0.02)
+cbar.set_label('Gain (G)', fontsize=12)
+
+ax.legend(fontsize=12, loc='upper right')
+plt.tight_layout()
+plt.show()
