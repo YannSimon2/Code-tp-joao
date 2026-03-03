@@ -7,10 +7,10 @@ from scipy.constants import k as kb, c
 energy = np.array([0.6,1.02,1.5,1.97,2.95,3.65,4.62,5.7,7.6,8.54,9.5,10.6])*1e-3
 u_energy = 0.01*1e-3
 
-plasma_size_longi_px = np.array([125,167,166,188,216,260,252,264,323,344,353,367])
+plasma_size_longi_px = np.array([125,167,166,188,216,260,285,300,323,344,353,367])
 u_plasma_size_longi_px = np.array([20])
 
-plasma_size_transv_px = np.array([217,252,287,303,336,371,365,369,462,480,485,501])
+plasma_size_transv_px = np.array([217,252,287,303,336,371,390,410,462,480,485,501])/2
 u_plasma_size_transv_px = np.array([20])
 
 needle_size_px = 1200
@@ -54,7 +54,7 @@ m_air = 4.81e-26  # average mass of air molecule (kg)
 # Time at which measurements were taken (ADJUST THIS BASED ON YOUR EXPERIMENT!)
 # For laser-induced plasma, typical imaging delay is a few nanoseconds
 t_measurement = 5.63/c  # 5.63 m / c ≈ 18.8 ns - CHANGE THIS to match your experimental delay
-
+u_t_measurement = 0.01/c  # uncertainty in measurement time (e.g., 0.5 ns)
 # Infer measurement time from Sedov-Taylor model
 # From theory: R(t) = ξ * (E/ρ₀)^(1/5) * t^(2/5)
 # From fit: R = C * E^(1/5)
@@ -71,6 +71,11 @@ u_t_inferred_longi = t_inferred_longi * (5/2) * (u_C_longi / C_longi)
 t_inferred_transv = (C_transv * rho0**(1/5) / xi)**(5/2)
 u_t_inferred_transv = t_inferred_transv * (5/2) * (u_C_transv / C_transv)
 
+# Calculate z-scores for comparison between inferred and measured times
+# z-score = |difference| / combined_uncertainty
+z_score_longi = abs(t_inferred_longi - t_measurement) / np.sqrt(u_t_inferred_longi**2 + u_t_measurement**2)
+z_score_transv = abs(t_inferred_transv - t_measurement) / np.sqrt(u_t_inferred_transv**2 + u_t_measurement**2)
+
 # Calculate shock parameters for each energy
 # From Sedov-Taylor: R = C·E^(1/5) at time t
 # Therefore: dR/dt = (2/5) · R/t (for Sedov-Taylor scaling)
@@ -83,28 +88,37 @@ plt.figure(figsize=(10, 5))
 plt.errorbar(energy, plasma_size_longi_m, yerr=u_plasma_size_longi_m, xerr=u_energy, fmt='o', capsize=5, label='Longitudinal Size')
 plt.errorbar(energy, plasma_size_transv_m, yerr=u_plasma_size_transv_m, xerr=u_energy, fmt='o', capsize=5, label='Transverse Size')
 
-# Plot Sedov-Taylor fits
+# Calculate uncertainty bands for the fits
+longi_upper = sedov_taylor_energy(energy_smooth, C_longi + 2*u_C_longi)
+longi_lower = sedov_taylor_energy(energy_smooth, C_longi - 2*u_C_longi)
+transv_upper = sedov_taylor_energy(energy_smooth, C_transv + 2*u_C_transv)
+transv_lower = sedov_taylor_energy(energy_smooth, C_transv - 2*u_C_transv)
+
+# Plot Sedov-Taylor fits with uncertainty bands
 plt.plot(energy_smooth, sedov_taylor_energy(energy_smooth, C_longi), 'r--', 
          label=f'Longi S-T fit: R=C·E$^{{1/5}}$, C=({C_longi:.4e}±{u_C_longi:.4e})')
+#plt.fill_between(energy_smooth, longi_lower, longi_upper, color='red', alpha=0.2, label='Longi ±2σ uncertainty')
+
 plt.plot(energy_smooth, sedov_taylor_energy(energy_smooth, C_transv), 'g--',
          label=f'Transv S-T fit: R=C·E$^{{1/5}}$, C=({C_transv:.4e}±{u_C_transv:.4e})')
+#plt.fill_between(energy_smooth, transv_lower, transv_upper, color='green', alpha=0.2, label='Transv ±2σ uncertainty')
 
 plt.xlabel('Energy (J)')
 plt.ylabel('Plasma Size (m)')
 plt.title('Plasma Size vs Energy (Sedov-Taylor scaling: R ∝ E$^{1/5}$)')
-plt.legend(fontsize=8)
+plt.legend(fontsize=7)
 plt.grid()
 
 # Add text box with time inference
-textstr = f'Time Inference from S-T model:\n'
-textstr += f'Assumed: t = {t_measurement*1e9:.1f} ns\n'
-textstr += f'Inferred (longi): t = {t_inferred_longi*1e9:.1f} ns\n'
-textstr += f'Inferred (transv): t = {t_inferred_transv*1e9:.1f} ns\n'
-textstr += f'Discrepancy (longi): {abs(t_inferred_longi - t_measurement)/t_measurement*100:.1f}%\n'
-textstr += f'Discrepancy (transv): {abs(t_inferred_transv - t_measurement)/t_measurement*100:.1f}%'
-props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
-plt.text(0.02, 0.98, textstr, transform=plt.gca().transAxes, fontsize=8,
-        verticalalignment='top', bbox=props)
+#textstr = f'Time Inference from S-T model:\n'
+#textstr += f'Assumed: t = ({t_measurement*1e9:.1f} ± {u_t_measurement*1e9:.1f}) ns\n'
+#textstr += f'Inferred (longi): t = ({t_inferred_longi*1e9:.1f} ± {u_t_inferred_longi*1e9:.1f}) ns\n'
+#textstr += f'Inferred (transv): t = ({t_inferred_transv*1e9:.1f} ± {u_t_inferred_transv*1e9:.1f}) ns\n'
+#textstr += f'Discrepancy (longi): {abs(t_inferred_longi - t_measurement)/t_measurement*100:.1f}% (z={z_score_longi:.2f}σ)\n'
+#textstr += f'Discrepancy (transv): {abs(t_inferred_transv - t_measurement)/t_measurement*100:.1f}% (z={z_score_transv:.2f}σ)'
+#props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
+#plt.text(0.02, 0.98, textstr, transform=plt.gca().transAxes, fontsize=8,
+       #verticalalignment='top', bbox=props)
 
 
 
@@ -129,11 +143,18 @@ print(f"\nInferred time from transverse data:")
 print(f"  t_inferred = ({t_inferred_transv*1e9:.2f} ± {u_t_inferred_transv*1e9:.2f}) ns")
 print(f"  t_inferred = ({t_inferred_transv*1e6:.3f} ± {u_t_inferred_transv*1e6:.3f}) μs")
 print(f"\n=== Comparison with Actual Measurement Time ===")
-print(f"Assumed time:     t_measured  = {t_measurement*1e9:.2f} ns ({t_measurement*1e6:.3f} μs)")
-print(f"Inferred (longi): t_inferred  = {t_inferred_longi*1e9:.2f} ns ({t_inferred_longi*1e6:.3f} μs)")
+print(f"Assumed time:     t_measured  = ({t_measurement*1e9:.2f} ± {u_t_measurement*1e9:.2f}) ns ({t_measurement*1e6:.3f} μs)")
+print(f"\nInferred (longi): t_inferred  = ({t_inferred_longi*1e9:.2f} ± {u_t_inferred_longi*1e9:.2f}) ns ({t_inferred_longi*1e6:.3f} μs)")
 print(f"Discrepancy (longi):           {abs(t_inferred_longi - t_measurement)*1e9:.2f} ns ({abs(t_inferred_longi - t_measurement)/t_measurement*100:.1f}%)")
-print(f"Inferred (transv): t_inferred = {t_inferred_transv*1e9:.2f} ns ({t_inferred_transv*1e6:.3f} μs)")
+print(f"Z-score (longi):               {z_score_longi:.3f}σ")
+print(f"\nInferred (transv): t_inferred = ({t_inferred_transv*1e9:.2f} ± {u_t_inferred_transv*1e9:.2f}) ns ({t_inferred_transv*1e6:.3f} μs)")
 print(f"Discrepancy (transv):          {abs(t_inferred_transv - t_measurement)*1e9:.2f} ns ({abs(t_inferred_transv - t_measurement)/t_measurement*100:.1f}%)")
+print(f"Z-score (transv):              {z_score_transv:.3f}σ")
+print(f"\nInterpretation:")
+print(f"  |z| < 1: Agreement within 1σ (68% confidence)")
+print(f"  |z| < 2: Agreement within 2σ (95% confidence)")
+print(f"  |z| < 3: Agreement within 3σ (99.7% confidence)")
+print(f"  |z| > 3: Significant disagreement")
 
 
 

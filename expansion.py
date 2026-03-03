@@ -13,7 +13,7 @@ conversion_factor = needle_size_m / needle_size_px
 plasma_size_longi_px = np.array([241,318,356,390])
 u_plasma_size_longi_px = np.array([40,20,10,10])
 
-plasma_size_transv_px = np.array([268,378,536,606])
+plasma_size_transv_px = np.array([268,378,536,606])/2
 u_plasma_size_transv_px = np.array([50,30,20,20])
 
 
